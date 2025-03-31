@@ -1,0 +1,69 @@
+#board {
+    width: 600px;      /* Set the desired width */
+    margin: 20px auto; /* Center the board horizontally with some margin */
+    border: 2px solid #333; /* Optional: a border to visualize the container */
+}
+
+#flipBtn{
+    position: fixed !important;
+    left: 100px;                    
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 15px 25px; 
+    font-size: 18px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+#flipBtn:hover {
+    background-color: #45a049;
+}
+
+.legal-dot {
+    width: 15px;
+    height: 15px;
+    background-color: rgba(0, 128, 0, 0.5); /* semi-transparent green */
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;               /* Center vertically */
+    left: 50%;              /* Center horizontally */
+    transform: translate(-50%, -50%); /* Adjust to exact center */
+    z-index: 10;
+}  
+
+/* Promotion modal styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5); /* semi-transparent overlay */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100; /* on top of everything */
+}
+
+.modal-content {
+    background: #fff;
+    padding: 20px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.promo-btn {
+    margin: 10px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+}
+  

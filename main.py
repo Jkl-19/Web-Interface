@@ -80,7 +80,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import chess
-from engine import compute_move
+from engine_white import compute_move as compute_move_white
+from engine_black import compute_move as compute_move_black
 
 app = FastAPI()
 # Mount the static folder so that files under "web" (CSS, JS, images) can be served.
@@ -128,10 +129,14 @@ async def move(payload: dict):
 async def engine_move_endpoint():
     # Check if the game is not over and it’s the engine’s turn.
     if not game_board.is_game_over() and game_board.turn != user_side:
-        engine_move = compute_move(game_board)
-        if engine_move and engine_move in game_board.legal_moves:
-            game_board.push(engine_move)
-            print("After engine move, FEN:", game_board.fen())
+        if user_side == "b" and game_board.turn == chess.WHITE:
+            engine_move = compute_move_white(game_board)
+            if engine_move in game_board.legal_moves:
+                game_board.push(engine_move)
+        if user_side == "w" and game_board.turn == chess.BLACK:
+            engine_move = compute_move_black(game_board)
+            if engine_move in game_board.legal_moves:
+                game_board.push(engine_move)
     # Return the updated board state.
     return {"fen": game_board.fen()}
 
@@ -144,7 +149,11 @@ async def reset(payload: dict):
     game_board = chess.Board()  # Reset the board to its starting position.
     # If the user is Black, white (the engine) moves first.
     if user_side == "b" and not game_board.is_game_over() and game_board.turn == chess.WHITE:
-        engine_move = compute_move(game_board)
+        engine_move = compute_move_white(game_board)
+        if engine_move in game_board.legal_moves:
+            game_board.push(engine_move)
+    if user_side == "w" and not game_board.is_game_over() and game_board.turn == chess.BLACK:
+        engine_move = compute_move_black(game_board)
         if engine_move in game_board.legal_moves:
             game_board.push(engine_move)
     return {"fen": game_board.fen()}

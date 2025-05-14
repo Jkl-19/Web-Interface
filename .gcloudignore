@@ -1,6 +1,0 @@
-# .gcloudignore
-web/
-.git/
-node_modules/
-*.log
-__pycache__/

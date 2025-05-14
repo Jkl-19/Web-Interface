@@ -11,9 +11,10 @@ app = FastAPI()
 
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=["https://chess-website-test.netlify.app"],  # replace with your actual domain
-  allow_methods=["GET","POST","OPTIONS"],
-  allow_headers=["*"],
+  allow_origins=["https://chess-website-test.netlify.app"],  # your real Netlify URL
+  allow_credentials=True,
+  allow_methods=["*"],    # <-- allow all HTTP verbs including OPTIONS
+  allow_headers=["*"],    # <-- allow any headers
 )
 
 # Serve the main HTML page.

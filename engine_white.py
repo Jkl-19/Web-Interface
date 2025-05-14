@@ -5,7 +5,7 @@ from tensorflow.keras import Model, models, layers, Input
 from stockfish import Stockfish
 from tensorflow.keras.initializers import HeNormal
 
-stockfish=Stockfish(path="stockfish.exe", depth=15)
+stockfish=Stockfish(path="stockfish", depth=15)
 
 board=chess.Board()
 def convert_board(board):

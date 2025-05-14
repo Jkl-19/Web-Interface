@@ -1,6 +1,6 @@
+# .gcloudignore
 web/
 .git/
-*.log
 node_modules/
-.env
+*.log
 __pycache__/

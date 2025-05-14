@@ -26,12 +26,16 @@
       document.getElementById('playWhiteBtn').addEventListener('click', function() {
         userSide = 'w';
         alert("You are playing as White. Engine will play Black.");
+        game = new Chess();
+        board.position('start', false);
         triggerReset(userSide);
       });
 
       document.getElementById('playBlackBtn').addEventListener('click', function() {
         userSide = 'b';
         alert("You are playing as Black. Engine will play White.");
+        game = new Chess();
+        board.position('start', false);
         triggerReset(userSide);
       });
 

@@ -4,8 +4,17 @@ import tensorflow as tf
 from tensorflow.keras import Model, models, layers, Input
 from stockfish import Stockfish
 from tensorflow.keras.initializers import HeNormal
+import os, stat
 
-stockfish=Stockfish(path="stockfish", depth=15)
+DIR = os.path.dirname(__file__)
+sf_path = os.path.join(DIR, "stockfish-ubuntu-x86-64-avx2")   # or whatever you named it
+
+# Ensure it’s executable (just in case)
+st = os.stat(sf_path)
+os.chmod(sf_path, st.st_mode | stat.S_IEXEC)
+
+# Tell the wrapper to use that binary
+stockfish = Stockfish(path=sf_path, depth=15)
 
 board=chess.Board()
 def convert_board(board):

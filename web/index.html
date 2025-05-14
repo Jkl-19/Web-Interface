@@ -149,7 +149,7 @@
           moveStr += promo;  // Append promotion piece if any.
         }
         console.log("Sending move string:", moveStr);
-        fetch('/move', {
+        fetch('https://web-interface-375230930092.us-central1.run.app/move', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({ move: moveStr })
@@ -178,7 +178,7 @@
 
       // Call the endpoint to trigger the engine move.
       function triggerEngineMove() {
-        fetch('/engine_move', {
+        fetch('https://web-interface-375230930092.us-central1.run.app/engine_move', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' }
         })
@@ -193,7 +193,7 @@
 
       // Call the endpoint to reset the game.
       function triggerReset(chosenSide) {
-        fetch('/reset', {
+        fetch('https://web-interface-375230930092.us-central1.run.app/reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ user_side: chosenSide })

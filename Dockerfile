@@ -16,7 +16,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 6) Copy your FastAPI app and engines
-COPY . .
+COPY main.py .
+COPY engine_white.py .
+COPY engine_black.py .
+COPY white.weights.h5 .
+COPY black.weights.h5 .
 
 # 7) (Optional) document the port—Cloud Run will inject $PORT
 EXPOSE 8080

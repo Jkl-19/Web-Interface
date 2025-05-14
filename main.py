@@ -5,9 +5,16 @@ import chess
 from engine_white import compute_move as compute_move_white
 from engine_black import compute_move as compute_move_black
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
-# Mount the static folder so that files under "web" (CSS, JS, images) can be served.
-app.mount("/web", StaticFiles(directory="web"), name="web")
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["https://your-netlify-site.netlify.app"],  # replace with your actual domain
+  allow_methods=["GET","POST","OPTIONS"],
+  allow_headers=["*"],
+)
 
 # Serve the main HTML page.
 @app.get("/", response_class=HTMLResponse)

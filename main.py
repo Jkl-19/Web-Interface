@@ -11,7 +11,7 @@ app = FastAPI()
 
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=["https://your-netlify-site.netlify.app"],  # replace with your actual domain
+  allow_origins=["https://chess-website-test.netlify.app"],  # replace with your actual domain
   allow_methods=["GET","POST","OPTIONS"],
   allow_headers=["*"],
 )

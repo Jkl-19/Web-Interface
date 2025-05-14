@@ -1,9 +1,12 @@
 FROM python:3.10-slim
 WORKDIR /app
 
-# 1) Copy your vendored binary
-COPY stockfish /usr/local/bin/stockfish
+# Copy your actual binary name and place it on PATH as 'stockfish'
+COPY stockfish-ubuntu-x86-64-avx2 /usr/local/bin/stockfish
 RUN chmod +x /usr/local/bin/stockfish
+
+# ... rest of Dockerfile unchanged ...
+
 
 # 2) Install Python deps
 COPY requirements.txt .

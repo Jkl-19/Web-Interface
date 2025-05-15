@@ -105,7 +105,7 @@ def get_eval_matrix(board):
     eval=stockfish.get_evaluation()
     value=eval["value"]
     if eval["type"]=="cp":
-      if not is_white: #we want the matrix to represent probabilities, so should be all positive.
+      if not is_white:
         value=-value
       eval_matrix[move.from_square,move.to_square]=value/100
     elif eval["type"]=="mate":

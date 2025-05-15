@@ -101,23 +101,28 @@
 
       // Ask the engine for its move
       function triggerEngineMove() {
-        console.log(`→ Sending to /engine_move: fen="${game.fen()}", side="${userSide}"`);
         fetch('/engine_move', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            fen:       game.fen(),
-            user_side: userSide
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fen: game.fen(), user_side: userSide })
         })
-        .then(r => r.json())
+        .then(async r => {
+          if (!r.ok) {
+            const body = await r.text();
+            throw new Error(`engine_move failed: HTTP ${r.status}\n${body || '(no body)'}`);
+          }
+          return r.json();
+        })
         .then(data => {
-          console.log(`← /engine_move replied: fen="${data.fen}"`);
-          game  = new Chess(data.fen);
+          game = new Chess(data.fen);
           board.position(data.fen);
         })
-        .catch(err => console.error("❌ Engine move failed:", err));
+        .catch(err => {
+          console.error(err);
+          alert(err.message);
+        });
       }
+
 
       // Reset / start new game
       function triggerReset() {

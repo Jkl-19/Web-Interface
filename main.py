@@ -72,11 +72,6 @@ async def move(payload: dict):
     return {"fen": board.fen()}
 
 @app.post("/engine_move")
-async def engine_move():
-    # note: no payload needed, we use query params below
-    raise HTTPException(400, "engine_move must include session_id")
-
-@app.post("/engine_move")
 async def engine_move(payload: dict):
     sid = payload.get("session_id")
     if not sid:

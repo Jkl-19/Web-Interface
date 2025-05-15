@@ -170,7 +170,7 @@
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             session_id: sessionId,
-            move:       moveStr
+            move:moveStr
           })
         })
         .then(r => r.json())

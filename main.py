@@ -1,7 +1,6 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 import chess
 import uuid
 
@@ -10,90 +9,90 @@ from engine_black import compute_move as compute_move_black
 
 app = FastAPI()
 
-# allow your Netlify origin to call this API
-app.add_middleware(
-  CORSMiddleware,
-  allow_origins=["https://chess-website-test.netlify.app/"],
-  allow_methods=["*"],
-  allow_headers=["*"],
-)
-
+# serve your static SPA
 app.mount("/web", StaticFiles(directory="web"), name="web")
 
 @app.get("/", response_class=HTMLResponse)
-async def read_index():
-  with open("web/index.html", "r", encoding="utf-8") as f:
-    return f.read()
+async def read_index(request: Request):
+    with open("web/index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
-# store per-session boards and sides
+# in-memory session storage: { session_id: Board }
 sessions: dict[str, chess.Board] = {}
+# user side storage: { session_id: 'w' or 'b' }
 sides:    dict[str, str]        = {}
 
 def get_board(sid: str) -> chess.Board:
-  board = sessions.get(sid)
-  if board is None:
-    raise HTTPException(400, "Unknown session_id")
-  return board
+    board = sessions.get(sid)
+    if board is None:
+        raise HTTPException(status_code=400, detail="Unknown session_id")
+    return board
 
 @app.post("/reset")
 async def reset(payload: dict):
-  sid       = payload.get("session_id")
-  user_side = payload.get("user_side", "b")
-  if not sid:
-    raise HTTPException(400, "No session_id provided")
+    sid = payload.get("session_id")
+    if not sid:
+        # if client forgot to send one, give them a fresh id!
+        sid = uuid.uuid4().hex
+    user_side = payload.get("user_side", "b").lower()
+    if user_side not in ("w", "b"):
+        raise HTTPException(400, "user_side must be 'w' or 'b'")
 
-  # create new board and store
-  board = chess.Board()
-  sessions[sid] = board
-  sides[sid]    = user_side
+    # create or overwrite this session
+    board = chess.Board()
+    sessions[sid] = board
+    sides[sid]    = user_side
 
-  # if engine to move first, push engine move
-  if user_side == "b" and board.turn == chess.WHITE:
-    m = compute_move_white(board)
-    if m in board.legal_moves:
-      board.push(m)
-  elif user_side == "w" and board.turn == chess.BLACK:
-    m = compute_move_black(board)
-    if m in board.legal_moves:
-      board.push(m)
+    # if user chose Black, White (engine) moves first
+    if user_side == "b" and board.turn == chess.WHITE:
+        mv = compute_move_white(board)
+        if mv in board.legal_moves:
+            board.push(mv)
 
-  return {"fen": board.fen()}
+    return JSONResponse({"session_id": sid, "fen": board.fen()})
 
 @app.post("/move")
 async def move(payload: dict):
-  sid      = payload.get("session_id")
-  move_str = payload.get("move")
-  if not sid or not move_str:
-    return JSONResponse({"error": "session_id and move are required"}, 400)
+    sid      = payload.get("session_id")
+    move_str = payload.get("move")
+    if not sid or not move_str:
+        raise HTTPException(400, "session_id and move are required")
 
-  board = get_board(sid)
-  try:
-    mv = chess.Move.from_uci(move_str)
-  except Exception as e:
-    return JSONResponse({"error": f"Invalid move: {e}"}, 400)
+    board = get_board(sid)
 
-  if mv not in board.legal_moves:
-    return JSONResponse({"error": "Illegal move"}, 400)
+    try:
+        mv = chess.Move.from_uci(move_str)
+    except Exception as e:
+        raise HTTPException(400, f"Invalid move format: {e}")
 
-  board.push(mv)
-  return {"fen": board.fen()}
+    if mv not in board.legal_moves:
+        raise HTTPException(400, "Illegal move")
+
+    board.push(mv)
+    return {"fen": board.fen()}
+
+@app.post("/engine_move")
+async def engine_move():
+    # note: no payload needed, we use query params below
+    raise HTTPException(400, "engine_move must include session_id")
 
 @app.post("/engine_move")
 async def engine_move(payload: dict):
-  sid = payload.get("session_id")
-  if not sid:
-    raise HTTPException(400, "No session_id provided")
+    sid = payload.get("session_id")
+    if not sid:
+        raise HTTPException(400, "session_id required")
 
-  board = get_board(sid)
-  user_side = sides.get(sid, "b")
+    board     = get_board(sid)
+    user_side = sides.get(sid, "b")
 
-  # only move if it's engine's turn
-  if not board.is_game_over() and board.turn != user_side:
-    if board.turn == chess.WHITE:
-      m = compute_move_white(board)
-    else:
-      m = compute_move_black(board)
-    if m in board.legal_moves:
-      board.push(m)
+    # only if it's the engine’s turn
+    if not board.is_game_over() and board.turn != user_side:
+        if board.turn == chess.WHITE:
+            mv = compute_move_white(board)
+        else:
+            mv = compute_move_black(board)
 
-  return {"fen": board.fen()}
+        if mv in board.legal_moves:
+            board.push(mv)
+
+    return {"fen": board.fen()}

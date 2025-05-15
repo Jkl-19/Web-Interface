@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8">
     <title>Chess Engine with CNN</title>
-    <link rel="stylesheet" href="chessboard.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/web/chessboard.css">
+    <link rel="stylesheet" href="/web/style.css">
   </head>
   <body>
     <h1>Testing CNN Chess Engine</h1>
@@ -14,164 +14,236 @@
     <div id="board"></div>
     <button id="flipBtn">Flip Board</button>
 
-    <script src="jquery-3.7.1.min.js"></script>
-    <script src="chess.js"></script>
-    <script src="chessboard.js"></script>
+    <script src="/web/jquery-3.7.1.min.js"></script>
+    <script src="/web/chess.js"></script>
+    <script src="/web/chessboard.js"></script>
     
     <script>
-      // UUID/session setup is fine
-      function makeUUID() {
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      // === Session setup ===
+      function makeUUID(){
+        return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g,c=>{
           const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
-          const v = c === 'x' ? r : (r & 0x3 | 0x8);
-          return v.toString(16);
+          return (c==='x'? r : (r&0x3|0x8)).toString(16);
         });
       }
+
       let sessionId = localStorage.getItem('sessionId');
-      if (!sessionId) {
+      if(!sessionId){
         sessionId = makeUUID();
         localStorage.setItem('sessionId', sessionId);
       }
 
-      console.clear();
-      console.log("🔔 Chess client starting…");
+      // Set default user side (Black).
+      var userSide = 'b';
 
-      const playWhiteBtn = document.getElementById('playWhiteBtn');
-      const playBlackBtn = document.getElementById('playBlackBtn');
-      let userSide = 'b';
-      let game = new Chess();
+      // Side selection buttons.
+      document.getElementById('playWhiteBtn').addEventListener('click', function() {
+        userSide = 'w';
+        alert("You are playing as White. Engine will play Black.");
+        game = new Chess();
+        board.position('start', false);
+        triggerReset(userSide);
+      });
 
-      const board = Chessboard('board', {
+      document.getElementById('playBlackBtn').addEventListener('click', function() {
+        userSide = 'b';
+        alert("You are playing as Black. Engine will play White.");
+        game = new Chess();
+        board.position('start', false);
+        triggerReset(userSide);
+      });
+      
+      document.getElementById('board').style.touchAction = 'none';
+
+      // Initialize chess.js game and chessboard.js board.
+      var game = new Chess();
+      var board = Chessboard('board', {
         position: 'start',
-        pieceTheme: 'chesspieces/{piece}.png',
+        pieceTheme: '/web/chesspieces/{piece}.png',
         draggable: true,
         dropOffBoard: 'snapback',
-        onDragStart: (src, piece) => {
-          if (game.game_over() || game.turn() !== userSide) return false;
+        
+        onDragStart: function(source, piece) {
+          // Prevent moves if game is over or it's not the user's turn.
+          if (game.game_over() || (game.turn() !== userSide)) {
+            return false;
+          }
+          // Show legal moves with dots.
           $('.legal-dot').remove();
-          game.moves({ square: src, verbose: true }).forEach(mv => {
-            $(`[data-square="${mv.to}"]`)
-              .append('<div class="legal-dot"></div>');
+          var moves = game.moves({ square: source, verbose: true });
+          if (moves.length === 0) return;
+          moves.forEach(function(move) {
+            var squareEl = $('[data-square="' + move.to + '"]');
+            squareEl.append('<div class="legal-dot"></div>');
           });
         },
-        onSnapEnd: () => $('.legal-dot').remove(),
-        onDrop: (source, target) => {
-          const moves = game.moves({ square: source, verbose: true });
-          const mv    = moves.find(m => m.to === target);
-          if (!mv) return 'snapback';
+        onSnapEnd: function() {
+          $('.legal-dot').remove();
+        },
+        onDrop: function(source, target) {
+          // Get the legal moves from the source square.
+          var legalMoves = game.moves({ square: source, verbose: true });
+          // Find the move that ends on the target square.
+          var targetMove = legalMoves.find(function(move) {
+            return move.to === target;
+          });
 
-          const uci = source + target + (mv.promotion || '');
-          sendMove(uci);
-          return; // wait for server to re-draw
+          // If move is not legal, snap the piece back.
+          if (!targetMove) {
+            return 'snapback';
+          }
+          
+          // --- CASTLING HANDLING ---
+          // Check if the move is castling by looking at the SAN notation.
+          if (targetMove.san === "O-O" || targetMove.san === "O-O-O") {
+            // Execute castling move immediately on the front end.
+            var move = game.move({
+              from: source,
+              to: target,
+              promotion: 'q'
+            });
+            // Update board position so that both king and rook move together.
+            board.position(game.fen());
+            // Send the move to the backend.
+            handleMove(source, target);
+            return;
+          }
+          // --------------------------
+
+          // Check if promotion is needed.
+          var promotionNeeded = (targetMove.promotion !== undefined);
+          if (promotionNeeded) {
+            // For promotion moves, show a modal for piece selection.
+            setTimeout(function() {
+              showPromotionDialog().then(function(promo) {
+                console.log("Making promotion move with:", promo);
+                var move = game.move({
+                  from: source,
+                  to: target,
+                  promotion: promo
+                });
+                if (move === null) {
+                  board.position(game.fen());
+                  return 'snapback';
+                }
+                handleMove(source, target, promo);
+              });
+            }, 0);
+            return 'snapback';
+          } else {
+            // For normal moves, execute the move.
+            var move = game.move({
+              from: source,
+              to: target,
+              promotion: 'q'
+            });
+            if (move === null) {
+              return 'snapback';
+            }
+            handleMove(source, target);
+          }
         }
       });
 
-      // Side-selection
-      playWhiteBtn.onclick = () => {
-        userSide = 'w';
-        alert("You are playing White; engine will play Black.");
-        triggerReset();
-      };
-      playBlackBtn.onclick = () => {
-        userSide = 'b';
-        alert("You are playing Black; engine will play White.");
-        triggerReset();
-      };
+      // Function to show the promotion modal and return the selected piece.
+      function showPromotionDialog() {
+        return new Promise(function(resolve, reject) {
+          $('#promotion-modal').removeClass('hidden');
+          $('.promo-btn').one('click', function() {
+            var promo = $(this).attr('data-piece');
+            $('#promotion-modal').addClass('hidden');
+            resolve(promo);
+          });
+        });
+      }
 
-      // Flip
-      document.getElementById('flipBtn').onclick = () => board.flip();
-
-      // Send a human move to /move
-      function sendMove(moveStr) {
+      // Send move to backend.
+      function handleMove(source, target, promo) {
+        if (source == target) return 'snapback';
+        var moveStr = source + target;
+        if (promo) {
+          moveStr += promo;  // Append promotion piece if any.
+        }
+        console.log("Sending move string:", moveStr);
         fetch('/move', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             session_id: sessionId,
-            user_side:  userSide,
             move:       moveStr
           })
         })
-        .then(r => {
-          if (!r.ok) {
-            return r.json().then(err => {
-              throw new Error(err.error || JSON.stringify(err));
-            });
-          }
-          return r.json();
-        })
+        .then(r => r.json())
         .then(data => {
-          // data.fen is the new position
-          game = new Chess(data.fen);
-          board.position(data.fen, true);
-
-          // if it's now the engine's turn, ask it to move
-          if (game.turn() !== userSide) {
-            triggerEngineMove();
+          console.log("Backend response:", data);
+          if (data.error) {
+            alert(data.error);
+            board.position(game.fen());
+          } else {
+            // Update game state with the human move.
+            game = new Chess(data.fen);
+            board.position(data.fen, true);
+            // Optionally, after a brief delay, trigger the engine move.
+            if (game.turn() !== userSide) {
+              triggerEngineMove();
+            }
           }
-        })
-        .catch(err => {
-          console.error("❌ Move failed:", err);
-          alert('Move failed: ' + err.message);
-          // no FEN to revert to client-side; just reload from server
-          triggerReset();
-        });
-      }
-
-      // Ask the engine for its move
-      function triggerEngineMove() {
-        playWhiteBtn.disabled = playBlackBtn.disabled = true;
-        fetch('/engine_move', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            session_id: sessionId,
-            user_side:  userSide
-          })
-        })
-        .then(r => {
-          if (!r.ok) throw new Error(`Engine move failed: HTTP ${r.status}`);
-          return r.json();
-        })
-        .then(data => {
-          game = new Chess(data.fen);
-          board.position(data.fen);
         })
         .catch(err => {
           console.error(err);
-          alert(err.message);
-        })
-        .finally(() => {
-          playWhiteBtn.disabled = playBlackBtn.disabled = false;
+          return 'snapback';
         });
       }
 
-      // Reset / start new game
-      function triggerReset() {
+      // Call the endpoint to trigger the engine move.
+      function triggerEngineMove() {
+        fetch('/engine_move', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ session_id: sessionId })
+        })
+        .then(r => r.json())
+        .then(data => {
+          console.log("Engine move response:", data);
+          game = new Chess(data.fen);
+          board.position(data.fen);
+        })
+        .catch(err => console.error(err));
+      }
+
+      // Call the endpoint to reset the game.
+      function triggerReset(chosenSide) {
         fetch('/reset', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
             session_id: sessionId,
             user_side:  userSide
           })
         })
-        .then(r => {
-          if (!r.ok) throw new Error('Reset failed');
-          return r.json();
-        })
-        .then(data => {
-          game = new Chess(data.fen);
-          board.position(data.fen);
-        })
-        .catch(err => {
-          console.error("❌ Reset failed:", err);
-          alert('Reset failed: ' + err.message);
-        });
+        .catch(err => console.error(err));
       }
 
-      // Clean up dots on touchend/mouseup
-      $(document).on('mouseup touchend', () => $('.legal-dot').remove());
+      // Flip board button.
+      document.getElementById('flipBtn').addEventListener('click', function(){
+        board.flip();
+      });
+
+      // Clean up legal move dots on mouse up or touch end.
+      $(document).on('mouseup touchend', function() {
+        $('.legal-dot').remove();
+      });
     </script>
+
+    <!-- Promotion modal for pawn promotion moves. -->
+    <div id="promotion-modal" class="modal hidden">
+      <div class="modal-content">
+        <h3>Choose Promotion</h3>
+        <button class="promo-btn" data-piece="q">Queen</button>
+        <button class="promo-btn" data-piece="r">Rook</button>
+        <button class="promo-btn" data-piece="b">Bishop</button>
+        <button class="promo-btn" data-piece="n">Knight</button>
+      </div>
+    </div>
   </body>
 </html>

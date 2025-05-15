@@ -101,27 +101,37 @@
 
       // Ask the engine for its move
       function triggerEngineMove() {
-        fetch('/engine_move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fen: game.fen(), user_side: userSide })
-        })
-        .then(async r => {
-          if (!r.ok) {
-            const body = await r.text();
-            throw new Error(`engine_move failed: HTTP ${r.status}\n${body || '(no body)'}`);
-          }
-          return r.json();
-        })
-        .then(data => {
-          game = new Chess(data.fen);
-          board.position(data.fen);
-        })
-        .catch(err => {
-          console.error(err);
-          alert(err.message);
-        });
-      }
+          // disable BOTH buttons as soon as we fire off the engine call
+          playWhiteBtn.disabled = playBlackBtn.disabled = true;
+
+          fetch('/engine_move', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({
+              fen:       game.fen(),
+              user_side: userSide
+            })
+          })
+          .then(async r => {
+            if (!r.ok) {
+              const body = await r.text();
+              throw new Error(`engine_move failed: HTTP ${r.status}\n${body||'(no body)'}`);
+            }
+            return r.json();
+          })
+          .then(data => {
+            game  = new Chess(data.fen);
+            board.position(data.fen);
+          })
+          .catch(err => {
+            console.error(err);
+            alert(err.message);
+          })
+          .finally(() => {
+            // re-enable both buttons once we’ve gotten a response (or error)
+            playWhiteBtn.disabled = playBlackBtn.disabled = false;
+          });
+        }
 
 
       // Reset / start new game

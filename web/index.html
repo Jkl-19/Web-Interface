@@ -151,8 +151,11 @@
         console.log("Sending move string:", moveStr);
         fetch('/move', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ move: moveStr })
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            fen: game.fen(),
+            move: moveStr
+          })
         })
         .then(r => r.json())
         .then(data => {
@@ -180,8 +183,12 @@
       function triggerEngineMove() {
         fetch('/engine_move', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            fen: game.fen(),
+            user_side: userSide
+          })
+      })
         .then(r => r.json())
         .then(data => {
           console.log("Engine move response:", data);
@@ -195,8 +202,8 @@
       function triggerReset(chosenSide) {
         fetch('/reset', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_side: chosenSide })
+          headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ user_side: userSide })
         })
         .then(r => r.json())
         .then(data => {

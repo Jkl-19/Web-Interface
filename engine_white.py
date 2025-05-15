@@ -127,8 +127,8 @@ def compute_move(board):
     return False
   y_pred_renorm=y_pred_mask/sum
   eval_matrix=get_eval_matrix(board)
-  alpha=5
-  beta=0.90
+  alpha=3
+  beta=1
   combined_matrix=y_pred_renorm*alpha+eval_matrix.flatten()
   idx=combined_matrix.argmax()
   start_sq=idx//64

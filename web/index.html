@@ -37,18 +37,30 @@
       // Side selection buttons.
       document.getElementById('playWhiteBtn').addEventListener('click', function() {
         userSide = 'w';
-        alert("You are playing as White. Engine will play Black.");
-        game = new Chess();
-        board.position('start', false);
-        triggerReset(userSide);
+        alert("New game as White—engine will play Black.");
+        fetch('/new_game', { method: 'POST' })
+          .then(r => r.json())
+          .then(data => {
+            gameId = data.game_id;
+            game = new Chess(data.fen);
+            board.position(data.fen);
+          })
+          .catch(console.error);
       });
 
       document.getElementById('playBlackBtn').addEventListener('click', function() {
         userSide = 'b';
-        alert("You are playing as Black. Engine will play White.");
-        game = new Chess();
-        board.position('start', false);
-        triggerReset(userSide);
+        alert("New game as Black—engine will play White.");
+        fetch('/new_game', { method: 'POST' })
+          .then(r => r.json())
+          .then(data => {
+            gameId = data.game_id;
+            game = new Chess(data.fen);
+            board.position(data.fen);
+            // Since engine is White, immediately trigger it:
+            triggerEngineMove();
+          })
+          .catch(console.error);
       });
 
       // Initialize chess.js game and chessboard.js board.

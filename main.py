@@ -24,7 +24,7 @@ class ResetRequest(BaseModel):
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://chess-website-test.netlify.app"],  # your real URL
+    allow_origins=["https://chess-website-test.netlify.app/"],  # your real URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

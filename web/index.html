@@ -221,6 +221,16 @@
             user_side:  userSide
           })
         })
+        .then(r => {
+          if (!r.ok) throw new Error('Reset failed');
+          return r.json();
+        })
+        .then(data => {
+          console.log("Reset response:", data);
+          // update both chess.js and the board display:
+          game.load(data.fen);
+          board.position(data.fen, true);
+        })
         .catch(err => console.error(err));
       }
 

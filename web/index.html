@@ -21,7 +21,19 @@
     <script>
       // Set default user side (Black).
       var userSide = 'b';
+      let gameId = null;
 
+      // When the page loads, ask the server for a new game_id + FEN
+      fetch('/new_game', {
+        method: 'POST'
+      })
+        .then(r => r.json())
+        .then(data => {
+          gameId = data.game_id;
+          game = new Chess(data.fen);
+          board.position(data.fen);
+        })
+        .catch(console.error);
       // Side selection buttons.
       document.getElementById('playWhiteBtn').addEventListener('click', function() {
         userSide = 'w';
@@ -153,7 +165,7 @@
           method: 'POST',
           headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
-            fen: game.fen(),
+            game_id: gameId,
             move: moveStr
           })
         })
@@ -184,11 +196,8 @@
         fetch('/engine_move', {
           method: 'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            fen: game.fen(),
-            user_side: userSide
-          })
-      })
+          body: JSON.stringify({ game_id: gameId })
+        })
         .then(r => r.json())
         .then(data => {
           console.log("Engine move response:", data);
@@ -203,7 +212,10 @@
         fetch('/reset', {
           method: 'POST',
           headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ user_side: userSide })
+          body: JSON.stringify({
+            game_id: gameId,
+            user_side: userSide
+          })
         })
         .then(r => r.json())
         .then(data => {

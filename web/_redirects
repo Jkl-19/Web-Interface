@@ -1,3 +1,7 @@
-/move        https://web-interface-375230930092.us-central1.run.app/move        200
-/engine_move https://web-interface-375230930092.us-central1.run.app/engine_move 200
-/reset       https://web-interface-375230930092.us-central1.run.app/reset       200
+# Proxy our four endpoints back to Cloud Run
+/move          https://web-interface-375230930092.us-central1.run.app/move          200
+/engine_move   https://web-interface-375230930092.us-central1.run.app/engine_move   200
+/reset         https://web-interface-375230930092.us-central1.run.app/reset         200
+
+# If you had /new_game in the stateless approach:
+/new_game      https://web-interface-375230930092.us-central1.run.app/new_game      200

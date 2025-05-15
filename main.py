@@ -66,9 +66,6 @@ def engine_move(req: EngineRequest):
     user_side = req.user_side.lower()
     is_white_to_move = board.turn == chess.WHITE
 
-    # Only let engine move on its turn:
-    # if user is white, engine is black: move when BOARD.turn == BLACK
-    # if user is black, engine is white: move when BOARD.turn == WHITE
     if not board.is_game_over():
         if (user_side == "w" and not is_white_to_move) or \
            (user_side == "b" and is_white_to_move):

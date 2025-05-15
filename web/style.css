@@ -2,6 +2,8 @@
     width: 600px;      /* Set the desired width */
     margin: 20px auto; /* Center the board horizontally with some margin */
     border: 2px solid #333; /* Optional: a border to visualize the container */
+    touch-action: none;
+    overscroll-behavior: contain;
 }
 
 #flipBtn{

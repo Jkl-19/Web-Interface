@@ -19,77 +19,58 @@
     <script src="chessboard.js"></script>
     
     <script>
-      // Which side the human is playing: 'b' = Black, 'w' = White
-      var userSide = 'b';
+      console.clear();
+      console.log("🔔 Chess client starting…");
 
-      // Initialize a local chess.js board and chessboard.js UI
-      var game = new Chess();
+      var userSide = 'b';
+      var game     = new Chess();
+
       var board = Chessboard('board', {
         position: 'start',
         pieceTheme: 'chesspieces/{piece}.png',
         draggable: true,
         dropOffBoard: 'snapback',
-        onDragStart: function(source, piece) {
-          if (game.game_over() || game.turn() !== userSide) {
-            return false;
-          }
-          // show legal move dots
+        onDragStart: (src, piece) => {
+          if (game.game_over() || game.turn() !== userSide) return false;
           $('.legal-dot').remove();
-          game.moves({ square: source, verbose: true }).forEach(mv => {
-            $('[data-square="' + mv.to + '"]').append('<div class="legal-dot"></div>');
-          });
+          game.moves({ square: src, verbose: true })
+              .forEach(mv => {
+                $(`[data-square="${mv.to}"]`)
+                  .append('<div class="legal-dot"></div>');
+              });
         },
-        onSnapEnd: function() {
-          $('.legal-dot').remove();
-        },
-        onDrop: function(source, target) {
-          // figure out if it's a legal move
+        onSnapEnd: () => $('.legal-dot').remove(),
+        onDrop: (source, target) => {
           const moves = game.moves({ square: source, verbose: true });
           const mv    = moves.find(m => m.to === target);
           if (!mv) return 'snapback';
 
-          // build the UCI string (promotion is included if present)
-          const uci = source + target + (mv.promotion || '');
-
-          // capture the FEN *before* making any local change
+          const uci       = source + target + (mv.promotion || '');
           const fenBefore = game.fen();
 
-          // send to your server; the server will validate/push and return the new FEN
+          console.log(`→ Sending to /move: fen="${fenBefore}", move="${uci}"`);
           sendMove(uci, fenBefore);
 
-          // chessboard.js: “I'll re-draw once I get the server reply”
-          return;
+          return; // wait for server to re-draw
         }
       });
 
-      // Side-selection buttons
-      document.getElementById('playWhiteBtn').addEventListener('click', () => {
+      // Side-selection
+      document.getElementById('playWhiteBtn').onclick = () => {
         userSide = 'w';
-        alert("You are playing as White. Engine will play Black.");
+        alert("You are playing White; engine will play Black.");
         triggerReset();
-      });
-      document.getElementById('playBlackBtn').addEventListener('click', () => {
+      };
+      document.getElementById('playBlackBtn').onclick = () => {
         userSide = 'b';
-        alert("You are playing as Black. Engine will play White.");
+        alert("You are playing Black; engine will play White.");
         triggerReset();
-      });
+      };
 
-      // Flip board
-      document.getElementById('flipBtn').addEventListener('click', () => board.flip());
+      // Flip
+      document.getElementById('flipBtn').onclick = () => board.flip();
 
-      // Promotion modal helper
-      function showPromotionDialog() {
-        return new Promise(resolve => {
-          $('#promotion-modal').removeClass('hidden');
-          $('.promo-btn').one('click', function() {
-            const p = $(this).data('piece');
-            $('#promotion-modal').addClass('hidden');
-            resolve(p);
-          });
-        });
-      }
-
-      // Send human move to /move
+      // Send a human move to /move
       function sendMove(moveStr, fenBefore) {
         fetch('/move', {
           method: 'POST',
@@ -98,49 +79,47 @@
         })
         .then(r => {
           if (!r.ok) {
-            // extract FastAPI detail message
-            return r.json().then(err => { throw new Error(err.detail || err) });
+            return r.json().then(err => {
+              throw new Error(err.detail || JSON.stringify(err));
+            });
           }
           return r.json();
         })
         .then(data => {
-          // server-validated FEN after your move
-          game = new Chess(data.fen);
+          console.log(`← /move replied: fen="${data.fen}"`);
+          game  = new Chess(data.fen);
           board.position(data.fen, true);
 
-          // engine reply if it’s now their turn
           if (game.turn() !== userSide) triggerEngineMove();
         })
         .catch(err => {
-          console.error(err);
+          console.error("❌ Move failed:", err);
           alert('Move failed: ' + err.message);
-          // snap back to the last-known good position
           board.position(fenBefore, true);
         });
       }
 
-      // Ask /engine_move for the engine’s reply
+      // Ask the engine for its move
       function triggerEngineMove() {
+        console.log(`→ Sending to /engine_move: fen="${game.fen()}", side="${userSide}"`);
         fetch('/engine_move', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
-            fen: game.fen(),
+            fen:       game.fen(),
             user_side: userSide
           })
         })
-        .then(r => {
-          if (!r.ok) console.error('Engine move failed:', r.status);
-          return r.json();
-        })
+        .then(r => r.json())
         .then(data => {
-          game = new Chess(data.fen);
+          console.log(`← /engine_move replied: fen="${data.fen}"`);
+          game  = new Chess(data.fen);
           board.position(data.fen);
         })
-        .catch(console.error);
+        .catch(err => console.error("❌ Engine move failed:", err));
       }
 
-      // Reset or start a new game via /reset
+      // Reset / start new game
       function triggerReset() {
         fetch('/reset', {
           method: 'POST',
@@ -149,25 +128,15 @@
         })
         .then(r => r.json())
         .then(data => {
-          game = new Chess(data.fen);
+          console.log(`← /reset replied: fen="${data.fen}"`);
+          game  = new Chess(data.fen);
           board.position(data.fen);
         })
-        .catch(console.error);
+        .catch(err => console.error("❌ Reset failed:", err));
       }
 
-      // Clean up dots on mouse up/touch end
+      // Clean up dots
       $(document).on('mouseup touchend', () => $('.legal-dot').remove());
     </script>
-
-    <!-- Promotion modal -->
-    <div id="promotion-modal" class="modal hidden">
-      <div class="modal-content">
-        <h3>Choose Promotion</h3>
-        <button class="promo-btn" data-piece="q">Queen</button>
-        <button class="promo-btn" data-piece="r">Rook</button>
-        <button class="promo-btn" data-piece="b">Bishop</button>
-        <button class="promo-btn" data-piece="n">Knight</button>
-      </div>
-    </div>
   </body>
 </html>

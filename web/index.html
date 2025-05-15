@@ -21,9 +21,10 @@
     <script>
       console.clear();
       console.log("🔔 Chess client starting…");
-
+      const playWhiteBtn = document.getElementById('playWhiteBtn');
+      const playBlackBtn = document.getElementById('playBlackBtn');
       var userSide = 'b';
-      var game     = new Chess();
+      var game = new Chess();
 
       var board = Chessboard('board', {
         position: 'start',
@@ -102,6 +103,7 @@
       // Ask the engine for its move
       function triggerEngineMove() {
           // disable BOTH buttons as soon as we fire off the engine call
+          console.log('→ triggerEngineMove:', { fen: game.fen(), userSide });
           playWhiteBtn.disabled = playBlackBtn.disabled = true;
 
           fetch('/engine_move', {
@@ -120,6 +122,7 @@
             return r.json();
           })
           .then(data => {
+            console.log('← engine_move replied:', data);
             game  = new Chess(data.fen);
             board.position(data.fen);
           })

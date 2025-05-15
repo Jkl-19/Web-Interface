@@ -43,7 +43,6 @@
           $('.legal-dot').remove();
         },
         onDrop: function(source, target) {
-          // find the move object
           const moves = game.moves({ square: source, verbose: true });
           const mv = moves.find(m => m.to === target);
           if (!mv) return 'snapback';
@@ -69,8 +68,8 @@
           }
 
           // normal move
-          game.move({ from: source, to: target, promotion: 'q' });
-          sendMove(source + target);
+          sendMove(source + target + (mv.promotion || ''));
+          return;
         }
       });
 
@@ -104,28 +103,32 @@
 
       // Send human move to /move
       function sendMove(moveStr) {
+        const fenBefore = game.fen();
         fetch('/move', {
           method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({
-            fen: game.fen(),
-            move: moveStr
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fen: fenBefore, move: moveStr })
         })
-        .then(r => r.json())
+        .then(r => {
+          // surface server errors
+          if (!r.ok) return r.json().then(err => { throw new Error(err.detail) });
+          return r.json();
+        })
         .then(data => {
-          if (data.error) {
-            alert(data.error);
-            board.position(game.fen());
-          } else {
-            game = new Chess(data.fen);
-            board.position(data.fen, true);
-            // engine move if it's now engine's turn
-            if (game.turn() !== userSide) triggerEngineMove();
-          }
+          // data.fen is the new FEN after your move
+          game = new Chess(data.fen);
+          board.position(data.fen, true);
+          // then trigger the engine if it’s their turn
+          if (game.turn() !== userSide) triggerEngineMove();
         })
-        .catch(console.error);
+        .catch(err => {
+          console.error(err);
+          alert('Move failed: ' + err.message);
+          // reset board to what it was
+          board.position(fenBefore, true);
+        });
       }
+
 
       // Ask /engine_move for the engine’s reply
       function triggerEngineMove() {

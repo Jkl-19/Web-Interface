@@ -1,65 +1,99 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 import chess
+import uuid
+
 from engine_white import compute_move as compute_move_white
 from engine_black import compute_move as compute_move_black
 
 app = FastAPI()
-# Serve static files under /web
+
+# allow your Netlify origin to call this API
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["https://chess-website-test.netlify.app/"],
+  allow_methods=["*"],
+  allow_headers=["*"],
+)
+
 app.mount("/web", StaticFiles(directory="web"), name="web")
 
-# Serve index.html
 @app.get("/", response_class=HTMLResponse)
-async def read_index(request: Request):
-    with open("web/index.html", "r", encoding="utf-8") as f:
-        return f.read()
+async def read_index():
+  with open("web/index.html", "r", encoding="utf-8") as f:
+    return f.read()
 
-# Global state
-game_board = chess.Board()
-user_side  = 'b'
+# store per-session boards and sides
+sessions: dict[str, chess.Board] = {}
+sides:    dict[str, str]        = {}
 
-# Human move endpoint (no FEN needed)
-@app.post("/move")
-async def move(payload: dict):
-    move_str = payload.get("move")
-    if not move_str:
-        raise HTTPException(status_code=400, detail="No move provided")
-    try:
-        mv = chess.Move.from_uci(move_str)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid move format: {e}")
-    if mv not in game_board.legal_moves:
-        raise HTTPException(status_code=400, detail="Illegal move")
+def get_board(sid: str) -> chess.Board:
+  board = sessions.get(sid)
+  if board is None:
+    raise HTTPException(400, "Unknown session_id")
+  return board
 
-    game_board.push(mv)
-    return {"fen": game_board.fen()}
-
-# Engine move endpoint
-@app.post("/engine_move")
-async def engine_move():
-    global game_board
-    # only run when it's engine's turn
-    if not game_board.is_game_over():
-        if user_side == 'b' and game_board.turn == chess.WHITE:
-            mv = compute_move_white(game_board)
-            if mv in game_board.legal_moves:
-                game_board.push(mv)
-        elif user_side == 'w' and game_board.turn == chess.BLACK:
-            mv = compute_move_black(game_board)
-            if mv in game_board.legal_moves:
-                game_board.push(mv)
-    return {"fen": game_board.fen()}
-
-# Reset endpoint
 @app.post("/reset")
 async def reset(payload: dict):
-    global game_board, user_side
-    user_side = payload.get("user_side", "b").lower()
-    game_board = chess.Board()
-    # engine first move if user chose black
-    if user_side == 'b' and game_board.turn == chess.WHITE:
-        mv = compute_move_white(game_board)
-        if mv in game_board.legal_moves:
-            game_board.push(mv)
-    return {"fen": game_board.fen()}
+  sid       = payload.get("session_id")
+  user_side = payload.get("user_side", "b")
+  if not sid:
+    raise HTTPException(400, "No session_id provided")
+
+  # create new board and store
+  board = chess.Board()
+  sessions[sid] = board
+  sides[sid]    = user_side
+
+  # if engine to move first, push engine move
+  if user_side == "b" and board.turn == chess.WHITE:
+    m = compute_move_white(board)
+    if m in board.legal_moves:
+      board.push(m)
+  elif user_side == "w" and board.turn == chess.BLACK:
+    m = compute_move_black(board)
+    if m in board.legal_moves:
+      board.push(m)
+
+  return {"fen": board.fen()}
+
+@app.post("/move")
+async def move(payload: dict):
+  sid      = payload.get("session_id")
+  move_str = payload.get("move")
+  if not sid or not move_str:
+    return JSONResponse({"error": "session_id and move are required"}, 400)
+
+  board = get_board(sid)
+  try:
+    mv = chess.Move.from_uci(move_str)
+  except Exception as e:
+    return JSONResponse({"error": f"Invalid move: {e}"}, 400)
+
+  if mv not in board.legal_moves:
+    return JSONResponse({"error": "Illegal move"}, 400)
+
+  board.push(mv)
+  return {"fen": board.fen()}
+
+@app.post("/engine_move")
+async def engine_move(payload: dict):
+  sid = payload.get("session_id")
+  if not sid:
+    raise HTTPException(400, "No session_id provided")
+
+  board = get_board(sid)
+  user_side = sides.get(sid, "b")
+
+  # only move if it's engine's turn
+  if not board.is_game_over() and board.turn != user_side:
+    if board.turn == chess.WHITE:
+      m = compute_move_white(board)
+    else:
+      m = compute_move_black(board)
+    if m in board.legal_moves:
+      board.push(m)
+
+  return {"fen": board.fen()}

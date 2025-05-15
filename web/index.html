@@ -1,94 +1,177 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Chess Engine with CNN</title>
-  <link rel="stylesheet" href="web/chessboard.css">
-  <link rel="stylesheet" href="web/style.css">
-</head>
-<body>
-  <h1>Testing CNN Chess Engine</h1>
-  <button id="playWhiteBtn">Play as White</button>
-  <button id="playBlackBtn">Play as Black</button>
-  <div id="board"></div>
-  <button id="flipBtn">Flip Board</button>
+  <head>
+    <meta charset="UTF-8">
+    <title>Chess Engine with CNN</title>
+    <link rel="stylesheet" href="chessboard.css">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <h1>Testing CNN Chess Engine</h1>
+    <button id="playWhiteBtn">Play as White</button>
+    <button id="playBlackBtn">Play as Black</button>
 
-  <script src="web/jquery-3.7.1.min.js"></script>
-  <script src="web/chess.js"></script>
-  <script src="web/chessboard.js"></script>
-  <script>
-    console.clear();
-    let userSide = 'b';
-    let game = new Chess();
-    const playWhiteBtn = document.getElementById('playWhiteBtn');
-    const playBlackBtn = document.getElementById('playBlackBtn');
+    <div id="board"></div>
+    <button id="flipBtn">Flip Board</button>
 
-    // initialize board
-    const board = Chessboard('board', {
-      position: 'start',
-      pieceTheme: 'web/chesspieces/{piece}.png',
-      draggable: true,
-      dropOffBoard: 'snapback',
-      onDragStart: (src, piece) => {
-        if (game.game_over() || game.turn() !== userSide) return false;
-      },
-      onDrop: (source, target) => {
-        const moves = game.moves({ square: source, verbose: true });
-        const mv = moves.find(m => m.to === target);
-        if (!mv) return 'snapback';
-        const uci = source + target + (mv.promotion || '');
-        sendMove(uci);
+    <script src="jquery-3.7.1.min.js"></script>
+    <script src="chess.js"></script>
+    <script src="chessboard.js"></script>
+    
+    <script>
+      // UUID/session setup is fine
+      function makeUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = crypto.getRandomValues(new Uint8Array(1))[0] & 15;
+          const v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
       }
-    });
+      let sessionId = localStorage.getItem('sessionId');
+      if (!sessionId) {
+        sessionId = makeUUID();
+        localStorage.setItem('sessionId', sessionId);
+      }
 
-    playWhiteBtn.onclick = () => {
-      userSide = 'w';
-      triggerReset();
-    };
-    playBlackBtn.onclick = () => {
-      userSide = 'b';
-      triggerReset();
-    };
-    document.getElementById('flipBtn').onclick = () => board.flip();
+      console.clear();
+      console.log("🔔 Chess client starting…");
 
-    function sendMove(moveStr) {
-      fetch('/move', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ move: moveStr })
-      })
-      .then(r => r.json())
-      .then(data => {
-        game = new Chess(data.fen);
-        board.position(data.fen, true);
-        triggerEngineMove();
-      })
-      .catch(console.error);
-    }
+      const playWhiteBtn = document.getElementById('playWhiteBtn');
+      const playBlackBtn = document.getElementById('playBlackBtn');
+      let userSide = 'b';
+      let game = new Chess();
 
-    function triggerEngineMove() {
-      fetch('/engine_move', { method: 'POST' })
-        .then(r => r.json())
+      const board = Chessboard('board', {
+        position: 'start',
+        pieceTheme: 'chesspieces/{piece}.png',
+        draggable: true,
+        dropOffBoard: 'snapback',
+        onDragStart: (src, piece) => {
+          if (game.game_over() || game.turn() !== userSide) return false;
+          $('.legal-dot').remove();
+          game.moves({ square: src, verbose: true }).forEach(mv => {
+            $(`[data-square="${mv.to}"]`)
+              .append('<div class="legal-dot"></div>');
+          });
+        },
+        onSnapEnd: () => $('.legal-dot').remove(),
+        onDrop: (source, target) => {
+          const moves = game.moves({ square: source, verbose: true });
+          const mv    = moves.find(m => m.to === target);
+          if (!mv) return 'snapback';
+
+          const uci = source + target + (mv.promotion || '');
+          sendMove(uci);
+          return; // wait for server to re-draw
+        }
+      });
+
+      // Side-selection
+      playWhiteBtn.onclick = () => {
+        userSide = 'w';
+        alert("You are playing White; engine will play Black.");
+        triggerReset();
+      };
+      playBlackBtn.onclick = () => {
+        userSide = 'b';
+        alert("You are playing Black; engine will play White.");
+        triggerReset();
+      };
+
+      // Flip
+      document.getElementById('flipBtn').onclick = () => board.flip();
+
+      // Send a human move to /move
+      function sendMove(moveStr) {
+        fetch('/move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_side:  userSide,
+            move:       moveStr
+          })
+        })
+        .then(r => {
+          if (!r.ok) {
+            return r.json().then(err => {
+              throw new Error(err.error || JSON.stringify(err));
+            });
+          }
+          return r.json();
+        })
         .then(data => {
+          // data.fen is the new position
           game = new Chess(data.fen);
           board.position(data.fen, true);
-        })
-        .catch(console.error);
-    }
 
-    function triggerReset() {
-      fetch('/reset', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_side: userSide })
-      })
-      .then(r => r.json())
-      .then(data => {
-        game = new Chess(data.fen);
-        board.position(data.fen, true);
-      })
-      .catch(console.error);
-    }
-  </script>
-</body>
+          // if it's now the engine's turn, ask it to move
+          if (game.turn() !== userSide) {
+            triggerEngineMove();
+          }
+        })
+        .catch(err => {
+          console.error("❌ Move failed:", err);
+          alert('Move failed: ' + err.message);
+          // no FEN to revert to client-side; just reload from server
+          triggerReset();
+        });
+      }
+
+      // Ask the engine for its move
+      function triggerEngineMove() {
+        playWhiteBtn.disabled = playBlackBtn.disabled = true;
+        fetch('/engine_move', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_side:  userSide
+          })
+        })
+        .then(r => {
+          if (!r.ok) throw new Error(`Engine move failed: HTTP ${r.status}`);
+          return r.json();
+        })
+        .then(data => {
+          game = new Chess(data.fen);
+          board.position(data.fen);
+        })
+        .catch(err => {
+          console.error(err);
+          alert(err.message);
+        })
+        .finally(() => {
+          playWhiteBtn.disabled = playBlackBtn.disabled = false;
+        });
+      }
+
+      // Reset / start new game
+      function triggerReset() {
+        fetch('/reset', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            session_id: sessionId,
+            user_side:  userSide
+          })
+        })
+        .then(r => {
+          if (!r.ok) throw new Error('Reset failed');
+          return r.json();
+        })
+        .then(data => {
+          game = new Chess(data.fen);
+          board.position(data.fen);
+        })
+        .catch(err => {
+          console.error("❌ Reset failed:", err);
+          alert('Reset failed: ' + err.message);
+        });
+      }
+
+      // Clean up dots on touchend/mouseup
+      $(document).on('mouseup touchend', () => $('.legal-dot').remove());
+    </script>
+  </body>
 </html>

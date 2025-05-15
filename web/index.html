@@ -1,160 +1,94 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <title>Chess Engine with CNN</title>
-    <link rel="stylesheet" href="chessboard.css">
-    <link rel="stylesheet" href="style.css">
-  </head>
-  <body>
-    <h1>Testing CNN Chess Engine</h1>
-    <button id="playWhiteBtn">Play as White</button>
-    <button id="playBlackBtn">Play as Black</button>
+<head>
+  <meta charset="UTF-8">
+  <title>Chess Engine with CNN</title>
+  <link rel="stylesheet" href="web/chessboard.css">
+  <link rel="stylesheet" href="web/style.css">
+</head>
+<body>
+  <h1>Testing CNN Chess Engine</h1>
+  <button id="playWhiteBtn">Play as White</button>
+  <button id="playBlackBtn">Play as Black</button>
+  <div id="board"></div>
+  <button id="flipBtn">Flip Board</button>
 
-    <div id="board"></div>
-    <button id="flipBtn">Flip Board</button>
+  <script src="web/jquery-3.7.1.min.js"></script>
+  <script src="web/chess.js"></script>
+  <script src="web/chessboard.js"></script>
+  <script>
+    console.clear();
+    let userSide = 'b';
+    let game = new Chess();
+    const playWhiteBtn = document.getElementById('playWhiteBtn');
+    const playBlackBtn = document.getElementById('playBlackBtn');
 
-    <script src="jquery-3.7.1.min.js"></script>
-    <script src="chess.js"></script>
-    <script src="chessboard.js"></script>
-    
-    <script>
-      console.clear();
-      console.log("🔔 Chess client starting…");
-      const playWhiteBtn = document.getElementById('playWhiteBtn');
-      const playBlackBtn = document.getElementById('playBlackBtn');
-      var userSide = 'b';
-      var game = new Chess();
-
-      var board = Chessboard('board', {
-        position: 'start',
-        pieceTheme: 'chesspieces/{piece}.png',
-        draggable: true,
-        dropOffBoard: 'snapback',
-        onDragStart: (src, piece) => {
-          if (game.game_over() || game.turn() !== userSide) return false;
-          $('.legal-dot').remove();
-          game.moves({ square: src, verbose: true })
-              .forEach(mv => {
-                $(`[data-square="${mv.to}"]`)
-                  .append('<div class="legal-dot"></div>');
-              });
-        },
-        onSnapEnd: () => $('.legal-dot').remove(),
-        onDrop: (source, target) => {
-          const moves = game.moves({ square: source, verbose: true });
-          const mv    = moves.find(m => m.to === target);
-          if (!mv) return 'snapback';
-
-          const uci       = source + target + (mv.promotion || '');
-          const fenBefore = game.fen();
-
-          console.log(`→ Sending to /move: fen="${fenBefore}", move="${uci}"`);
-          sendMove(uci, fenBefore);
-
-          return; // wait for server to re-draw
-        }
-      });
-
-      // Side-selection
-      document.getElementById('playWhiteBtn').onclick = () => {
-        userSide = 'w';
-        alert("You are playing White; engine will play Black.");
-        triggerReset();
-      };
-      document.getElementById('playBlackBtn').onclick = () => {
-        userSide = 'b';
-        alert("You are playing Black; engine will play White.");
-        triggerReset();
-      };
-
-      // Flip
-      document.getElementById('flipBtn').onclick = () => board.flip();
-
-      // Send a human move to /move
-      function sendMove(moveStr, fenBefore) {
-        fetch('/move', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fen: fenBefore, move: moveStr })
-        })
-        .then(r => {
-          if (!r.ok) {
-            return r.json().then(err => {
-              throw new Error(err.detail || JSON.stringify(err));
-            });
-          }
-          return r.json();
-        })
-        .then(data => {
-          console.log(`← /move replied: fen="${data.fen}"`);
-          game  = new Chess(data.fen);
-          board.position(data.fen, true);
-
-          if (game.turn() !== userSide) triggerEngineMove();
-        })
-        .catch(err => {
-          console.error("❌ Move failed:", err);
-          alert('Move failed: ' + err.message);
-          board.position(fenBefore, true);
-        });
+    // initialize board
+    const board = Chessboard('board', {
+      position: 'start',
+      pieceTheme: 'web/chesspieces/{piece}.png',
+      draggable: true,
+      dropOffBoard: 'snapback',
+      onDragStart: (src, piece) => {
+        if (game.game_over() || game.turn() !== userSide) return false;
+      },
+      onDrop: (source, target) => {
+        const moves = game.moves({ square: source, verbose: true });
+        const mv = moves.find(m => m.to === target);
+        if (!mv) return 'snapback';
+        const uci = source + target + (mv.promotion || '');
+        sendMove(uci);
       }
+    });
 
-      // Ask the engine for its move
-      function triggerEngineMove() {
-          // disable BOTH buttons as soon as we fire off the engine call
-          console.log('→ triggerEngineMove:', { fen: game.fen(), userSide });
-          playWhiteBtn.disabled = playBlackBtn.disabled = true;
+    playWhiteBtn.onclick = () => {
+      userSide = 'w';
+      triggerReset();
+    };
+    playBlackBtn.onclick = () => {
+      userSide = 'b';
+      triggerReset();
+    };
+    document.getElementById('flipBtn').onclick = () => board.flip();
 
-          fetch('/engine_move', {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({
-              fen: game.fen(),
-              user_side: userSide
-            })
-          })
-          .then(async r => {
-            if (!r.ok) {
-              const body = await r.text();
-              throw new Error(`engine_move failed: HTTP ${r.status}\n${body||'(no body)'}`);
-            }
-            return r.json();
-          })
-          .then(data => {
-            console.log('← engine_move replied:', data);
-            game  = new Chess(data.fen);
-            board.position(data.fen);
-          })
-          .catch(err => {
-            console.error(err);
-            alert(err.message);
-          })
-          .finally(() => {
-            // re-enable both buttons once we’ve gotten a response (or error)
-            playWhiteBtn.disabled = playBlackBtn.disabled = false;
-          });
-        }
+    function sendMove(moveStr) {
+      fetch('/move', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ move: moveStr })
+      })
+      .then(r => r.json())
+      .then(data => {
+        game = new Chess(data.fen);
+        board.position(data.fen, true);
+        triggerEngineMove();
+      })
+      .catch(console.error);
+    }
 
-
-      // Reset / start new game
-      function triggerReset() {
-        fetch('/reset', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ user_side: userSide })
-        })
+    function triggerEngineMove() {
+      fetch('/engine_move', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
-          console.log(`← /reset replied: fen="${data.fen}"`);
           game = new Chess(data.fen);
-          board.position(data.fen);
+          board.position(data.fen, true);
         })
-        .catch(err => console.error("❌ Reset failed:", err));
-      }
+        .catch(console.error);
+    }
 
-      // Clean up dots
-      $(document).on('mouseup touchend', () => $('.legal-dot').remove());
-    </script>
-  </body>
+    function triggerReset() {
+      fetch('/reset', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ user_side: userSide })
+      })
+      .then(r => r.json())
+      .then(data => {
+        game = new Chess(data.fen);
+        board.position(data.fen, true);
+      })
+      .catch(console.error);
+    }
+  </script>
+</body>
 </html>

@@ -5,6 +5,7 @@ from tensorflow.keras import Model, models, layers, Input
 from stockfish import Stockfish
 from tensorflow.keras.initializers import HeNormal
 import os, stat
+from threading import Lock
 
 DIR = os.path.dirname(__file__)
 sf_path = os.path.join(DIR, "stockfish-ubuntu-x86-64-avx2")   # or whatever you named it
@@ -15,6 +16,7 @@ os.chmod(sf_path, st.st_mode | stat.S_IEXEC)
 
 # Tell the wrapper to use that binary
 stockfish = Stockfish(path=sf_path, depth=15)
+sf_lock = Lock()
 
 board=chess.Board()
 def convert_board(board):
@@ -94,7 +96,8 @@ model.load_weights('black.weights.h5')
 def get_eval_matrix(board):
   MATE_WEIGHT=1e4
 
-  entries = stockfish.get_top_moves(64)
+  with sf_lock:
+      entries=stockfish.get_top_moves(64)
 
   eval_matrix = np.full((64, 64), -1e6, dtype=np.float32)
   is_white=board.turn  

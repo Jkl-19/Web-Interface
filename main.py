@@ -1,4 +1,3 @@
-import uuid
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,73 +8,84 @@ import chess
 from engine_white import compute_move as compute_move_white
 from engine_black import compute_move as compute_move_black
 
-# Keep a dict of { game_id: chess.Board() } in memory
-games: dict[str, chess.Board] = {}
-
-class NewGameResponse(BaseModel):
-    game_id: str
-    fen: str
-
+# ——— request models ————————————————————————————————————————————————————
 class MoveRequest(BaseModel):
-    game_id: str
+    fen: str
     move: str
 
 class EngineRequest(BaseModel):
-    game_id: str
-
-class ResetRequest(BaseModel):
-    game_id: str
+    fen: str
     user_side: str   # "w" or "b"
 
+class ResetRequest(BaseModel):
+    user_side: str
+
+# ——— app setup ———————————————————————————————————————————————————————
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://chess-website-test.netlify.app"],
+    allow_origins=["https://chess-website-test.netlify.app"],  # your real URL
     allow_credentials=True,
-    allow_methods=["*"], allow_headers=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 app.mount("/web", StaticFiles(directory="web"), name="web")
 
-@app.post("/new_game", response_model=NewGameResponse)
-def new_game():
-    game_id = uuid.uuid4().hex
-    board = chess.Board()
-    games[game_id] = board
-    return {"game_id": game_id, "fen": board.fen()}
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    with open("web/index.html", "r", encoding="utf-8") as f:
+        return f.read()
 
+# ——— human move endpoint —————————————————————————————————————————————
 @app.post("/move")
 def move(req: MoveRequest):
-    board = games.get(req.game_id)
-    if board is None:
-        raise HTTPException(404, "Unknown game_id")
-    mv = chess.Move.from_uci(req.move)
+    try:
+        board = chess.Board(req.fen)
+    except Exception:
+        raise HTTPException(400, "Invalid FEN")
+
+    try:
+        mv = chess.Move.from_uci(req.move)
+    except Exception:
+        raise HTTPException(400, "Invalid move format")
+
     if mv not in board.legal_moves:
         raise HTTPException(400, "Illegal move")
+
     board.push(mv)
     return {"fen": board.fen()}
 
+# ——— engine move endpoint ————————————————————————————————————————————
 @app.post("/engine_move")
 def engine_move(req: EngineRequest):
-    board = games.get(req.game_id)
-    if board is None:
-        raise HTTPException(404, "Unknown game_id")
-    # engine plays if it's its turn
+    try:
+        board = chess.Board(req.fen)
+    except Exception:
+        raise HTTPException(400, "Invalid FEN")
+
+    user_side = req.user_side.lower()
+    is_white_to_move = board.turn == chess.WHITE
+
+    # Only let engine move on its turn:
+    # if user is white, engine is black: move when BOARD.turn == BLACK
+    # if user is black, engine is white: move when BOARD.turn == WHITE
     if not board.is_game_over():
-        # white-to-move?
-        if board.turn == chess.WHITE:
-            mv = compute_move_white(board)
-        else:
-            mv = compute_move_black(board)
-        if mv in board.legal_moves:
-            board.push(mv)
+        if (user_side == "w" and not is_white_to_move) or \
+           (user_side == "b" and is_white_to_move):
+            # pick correct engine
+            mv = compute_move_white(board) if is_white_to_move else compute_move_black(board)
+            if mv in board.legal_moves:
+                board.push(mv)
+
     return {"fen": board.fen()}
 
+# ——— reset endpoint —————————————————————————————————————————————————
 @app.post("/reset")
 def reset(req: ResetRequest):
     board = chess.Board()
-    games[req.game_id] = board
-    # engine first move if user is black
-    if req.user_side == "b":
+    user_side = req.user_side.lower()
+    # engine first move if user chose black
+    if user_side == "b":
         mv = compute_move_white(board)
         if mv in board.legal_moves:
             board.push(mv)

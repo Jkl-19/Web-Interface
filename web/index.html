@@ -19,234 +19,154 @@
     <script src="chessboard.js"></script>
     
     <script>
-      // Set default user side (Black).
+      // Which side the human is playing: 'b' = Black, 'w' = White
       var userSide = 'b';
-      let gameId = null;
 
-      // Initialize chess.js game and chessboard.js board.
+      // Initialize a local chess.js board and chessboard.js UI
       var game = new Chess();
       var board = Chessboard('board', {
         position: 'start',
         pieceTheme: 'chesspieces/{piece}.png',
         draggable: true,
         dropOffBoard: 'snapback',
-        
         onDragStart: function(source, piece) {
-          // Prevent moves if game is over or it's not the user's turn.
-          if (game.game_over() || (game.turn() !== userSide)) {
+          if (game.game_over() || game.turn() !== userSide) {
             return false;
           }
-          // Show legal moves with dots.
+          // show legal move dots
           $('.legal-dot').remove();
-          var moves = game.moves({ square: source, verbose: true });
-          if (moves.length === 0) return;
-          moves.forEach(function(move) {
-            var squareEl = $('[data-square="' + move.to + '"]');
-            squareEl.append('<div class="legal-dot"></div>');
+          game.moves({ square: source, verbose: true }).forEach(mv => {
+            $('[data-square="' + mv.to + '"]').append('<div class="legal-dot"></div>');
           });
         },
         onSnapEnd: function() {
           $('.legal-dot').remove();
         },
         onDrop: function(source, target) {
-          // Get the legal moves from the source square.
-          var legalMoves = game.moves({ square: source, verbose: true });
-          // Find the move that ends on the target square.
-          var targetMove = legalMoves.find(function(move) {
-            return move.to === target;
-          });
+          // find the move object
+          const moves = game.moves({ square: source, verbose: true });
+          const mv = moves.find(m => m.to === target);
+          if (!mv) return 'snapback';
 
-          // If move is not legal, snap the piece back.
-          if (!targetMove) {
-            return 'snapback';
-          }
-          
-          // --- CASTLING HANDLING ---
-          // Check if the move is castling by looking at the SAN notation.
-          if (targetMove.san === "O-O" || targetMove.san === "O-O-O") {
-            // Execute castling move immediately on the front end.
-            var move = game.move({
-              from: source,
-              to: target,
-              promotion: 'q'
-            });
-            // Update board position so that both king and rook move together.
+          // handle castling
+          if (mv.san === "O-O" || mv.san === "O-O-O") {
+            game.move({ from: source, to: target, promotion: 'q' });
             board.position(game.fen());
-            // Send the move to the backend.
-            handleMove(source, target);
+            sendMove(source + target);
             return;
           }
-          // --------------------------
 
-          // Check if promotion is needed.
-          var promotionNeeded = (targetMove.promotion !== undefined);
-          if (promotionNeeded) {
-            // For promotion moves, show a modal for piece selection.
-            setTimeout(function() {
-              showPromotionDialog().then(function(promo) {
-                console.log("Making promotion move with:", promo);
-                var move = game.move({
-                  from: source,
-                  to: target,
-                  promotion: promo
-                });
-                if (move === null) {
-                  board.position(game.fen());
-                  return 'snapback';
-                }
-                handleMove(source, target, promo);
+          // handle promotion
+          if (mv.promotion) {
+            setTimeout(() => {
+              showPromotionDialog().then(promo => {
+                game.move({ from: source, to: target, promotion: promo });
+                board.position(game.fen());
+                sendMove(source + target + promo);
               });
             }, 0);
             return 'snapback';
-          } else {
-            // For normal moves, execute the move.
-            var move = game.move({
-              from: source,
-              to: target,
-              promotion: 'q'
-            });
-            if (move === null) {
-              return 'snapback';
-            }
-            handleMove(source, target);
           }
+
+          // normal move
+          game.move({ from: source, to: target, promotion: 'q' });
+          sendMove(source + target);
         }
       });
-      fetch('/new_game', { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-          gameId = data.game_id;
-          game = new Chess(data.fen);
-          board.position(data.fen);
-        })
-        .catch(console.error);
 
-      // Side selection buttons.
-      document.getElementById('playWhiteBtn').addEventListener('click', function() {
+      // On page load: get a fresh board from the server
+      triggerReset();
+
+      // Side-selection buttons
+      document.getElementById('playWhiteBtn').addEventListener('click', () => {
         userSide = 'w';
-        alert("New game as White—engine will play Black.");
-        fetch('/new_game', { method: 'POST' })
-          .then(r => r.json())
-          .then(data => {
-            gameId = data.game_id;
-            game = new Chess(data.fen);
-            board.position(data.fen);
-          })
-          .catch(console.error);
+        alert("You are playing as White. Engine will play Black.");
+        triggerReset();
       });
-
-      document.getElementById('playBlackBtn').addEventListener('click', function() {
+      document.getElementById('playBlackBtn').addEventListener('click', () => {
         userSide = 'b';
-        alert("New game as Black—engine will play White.");
-        fetch('/new_game', { method: 'POST' })
-          .then(r => r.json())
-          .then(data => {
-            gameId = data.game_id;
-            game = new Chess(data.fen);
-            board.position(data.fen);
-            // Since engine is White, immediately trigger it:
-            triggerEngineMove();
-          })
-          .catch(console.error);
+        alert("You are playing as Black. Engine will play White.");
+        triggerReset();
       });
 
-      // Function to show the promotion modal and return the selected piece.
+      // Flip board
+      document.getElementById('flipBtn').addEventListener('click', () => board.flip());
+
+      // Promotion modal helper
       function showPromotionDialog() {
-        return new Promise(function(resolve, reject) {
+        return new Promise(resolve => {
           $('#promotion-modal').removeClass('hidden');
           $('.promo-btn').one('click', function() {
-            var promo = $(this).attr('data-piece');
+            const p = $(this).data('piece');
             $('#promotion-modal').addClass('hidden');
-            resolve(promo);
+            resolve(p);
           });
         });
       }
 
-      // Send move to backend.
-      function handleMove(source, target, promo) {
-        if (source == target) return 'snapback';
-        var moveStr = source + target;
-        if (promo) {
-          moveStr += promo;  // Append promotion piece if any.
-        }
-        console.log("Sending move string:", moveStr);
+      // Send human move to /move
+      function sendMove(moveStr) {
         fetch('/move', {
           method: 'POST',
-          headers:{'Content-Type':'application/json'},
+          headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
-            game_id: gameId,
+            fen: game.fen(),
             move: moveStr
           })
         })
         .then(r => r.json())
         .then(data => {
-          console.log("Backend response:", data);
           if (data.error) {
             alert(data.error);
             board.position(game.fen());
           } else {
-            // Update game state with the human move.
             game = new Chess(data.fen);
             board.position(data.fen, true);
-            // Optionally, after a brief delay, trigger the engine move.
-            if (game.turn() !== userSide) {
-              triggerEngineMove();
-            }
+            // engine move if it's now engine's turn
+            if (game.turn() !== userSide) triggerEngineMove();
           }
         })
-        .catch(err => {
-          console.error(err);
-          return 'snapback';
-        });
+        .catch(console.error);
       }
 
-      // Call the endpoint to trigger the engine move.
+      // Ask /engine_move for the engine’s reply
       function triggerEngineMove() {
         fetch('/engine_move', {
           method: 'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ game_id: gameId })
-        })
-        .then(r => r.json())
-        .then(data => {
-          console.log("Engine move response:", data);
-          game = new Chess(data.fen);
-          board.position(data.fen);
-        })
-        .catch(err => console.error(err));
-      }
-
-      // Call the endpoint to reset the game.
-      function triggerReset(chosenSide) {
-        fetch('/reset', {
-          method: 'POST',
-          headers:{'Content-Type':'application/json'},
+          headers: {'Content-Type':'application/json'},
           body: JSON.stringify({
-            game_id: gameId,
+            fen: game.fen(),
             user_side: userSide
           })
         })
         .then(r => r.json())
         .then(data => {
-          console.log("Reset response:", data);
-          game.load(data.fen);
+          game = new Chess(data.fen);
           board.position(data.fen);
         })
-        .catch(err => console.error(err));
+        .catch(console.error);
       }
 
-      // Flip board button.
-      document.getElementById('flipBtn').addEventListener('click', function(){
-        board.flip();
-      });
+      // Reset or start a new game via /reset
+      function triggerReset() {
+        fetch('/reset', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ user_side: userSide })
+        })
+        .then(r => r.json())
+        .then(data => {
+          game = new Chess(data.fen);
+          board.position(data.fen);
+        })
+        .catch(console.error);
+      }
 
-      // Clean up legal move dots on mouse up or touch end.
-      $(document).on('mouseup touchend', function() {
-        $('.legal-dot').remove();
-      });
+      // Clean up dots on mouse up/touch end
+      $(document).on('mouseup touchend', () => $('.legal-dot').remove());
     </script>
 
-    <!-- Promotion modal for pawn promotion moves. -->
+    <!-- Promotion modal -->
     <div id="promotion-modal" class="modal hidden">
       <div class="modal-content">
         <h3>Choose Promotion</h3>

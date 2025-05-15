@@ -110,7 +110,7 @@
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify({
-              fen:       game.fen(),
+              fen: game.fen(),
               user_side: userSide
             })
           })
@@ -147,7 +147,7 @@
         .then(r => r.json())
         .then(data => {
           console.log(`← /reset replied: fen="${data.fen}"`);
-          game  = new Chess(data.fen);
+          game = new Chess(data.fen);
           board.position(data.fen);
         })
         .catch(err => console.error("❌ Reset failed:", err));

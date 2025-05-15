@@ -93,35 +93,35 @@ model=Model(inputs=input,outputs=output)
 model.load_weights('black.weights.h5')
 
 def get_eval_matrix(board):
-  MATE_WEIGHT=1e4
+  MATE_WEIGHT = 1e4
 
   engine = make_engine()
-  engine.set_fen_position(board.fen())           # ← tell SF the real position
+  engine.set_fen_position(board.fen())
   entries = engine.get_top_moves(64)
-  engine.quit()    
+  engine.quit()
 
-  eval_matrix = np.full((64, 64), -1e6, dtype=np.float32)
-  is_white=board.turn  
+  eval_matrix = np.full((64,64), -1e6, dtype=np.float32)
+  is_white = board.turn
 
   for entry in entries:
-    uci = entry["Move"]
-    fr, to = chess.parse_square(uci[:2]), chess.parse_square(uci[2:])
-    # … your centipawn / mate logic …
-    eval_matrix[fr,to] = v
+      uci = entry["Move"]
+      fr, to = chess.parse_square(uci[:2]), chess.parse_square(uci[2:])
 
-    if "Centipawn" in entry:
-        v = entry["Centipawn"] / 100.0
-        if not is_white:
-            v = -v
+      # compute v first…
+      if "Centipawn" in entry:
+          v = entry["Centipawn"] / 100.0
+          if not is_white: v = -v
 
-    elif "Mate" in entry:
-        m = entry["Mate"] or 1
-        v = MATE_WEIGHT / m
-        if not is_white:
-            v = -v
-    else:
-        continue
-    eval_matrix[fr,to] = v
+      elif "Mate" in entry:
+          m = entry["Mate"] or 1
+          v = MATE_WEIGHT / m
+          if not is_white: v = -v
+
+      else:
+          continue
+
+      # …then write it exactly once
+      eval_matrix[fr, to] = v
 
   return eval_matrix
 

@@ -125,7 +125,11 @@ def compute_move(board):
   y_pred_mask=y_pred*mask_board(board)
   sum=np.sum(y_pred_mask)
   if sum==0:
-    return False
+    best_uci = stockfish.get_best_move()
+    if best_uci:
+        return chess.Move.from_uci(best_uci)
+    # as a last fallback, pick any legal move
+    return next(iter(board.legal_moves))
   y_pred_renorm=y_pred_mask/sum
   eval_matrix=get_eval_matrix(board)
   alpha=3

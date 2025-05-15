@@ -1,102 +1,65 @@
-import logging
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import chess
-
 from engine_white import compute_move as compute_move_white
 from engine_black import compute_move as compute_move_black
 
-# ——— setup logging —————————————————————————————————————————————————————
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("chess-engine")
-
-# ——— request models ————————————————————————————————————————————————————
-class MoveRequest(BaseModel):
-    fen: str
-    move: str
-
-class EngineRequest(BaseModel):
-    fen: str
-    user_side: str   # "w" or "b"
-
-class ResetRequest(BaseModel):
-    user_side: str
-
-# ——— app setup ———————————————————————————————————————————————————————
 app = FastAPI()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://chess-website-test.netlify.app"],  # tighten back down now that proxy is working
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Serve static files under /web
 app.mount("/web", StaticFiles(directory="web"), name="web")
 
+# Serve index.html
 @app.get("/", response_class=HTMLResponse)
-async def read_index():
+async def read_index(request: Request):
     with open("web/index.html", "r", encoding="utf-8") as f:
         return f.read()
 
-# ——— human move endpoint —————————————————————————————————————————————
+# Global state
+game_board = chess.Board()
+user_side  = 'b'
+
+# Human move endpoint (no FEN needed)
 @app.post("/move")
-def move(req: MoveRequest):
-    logger.info(f"[MOVE] fen_before={req.fen}   move={req.move}")
+async def move(payload: dict):
+    move_str = payload.get("move")
+    if not move_str:
+        raise HTTPException(status_code=400, detail="No move provided")
     try:
-        board = chess.Board(req.fen)
-    except Exception:
-        raise HTTPException(400, "Invalid FEN")
+        mv = chess.Move.from_uci(move_str)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid move format: {e}")
+    if mv not in game_board.legal_moves:
+        raise HTTPException(status_code=400, detail="Illegal move")
 
-    try:
-        mv = chess.Move.from_uci(req.move)
-    except Exception:
-        raise HTTPException(400, "Invalid move format")
+    game_board.push(mv)
+    return {"fen": game_board.fen()}
 
-    if mv not in board.legal_moves:
-        raise HTTPException(400, "Illegal move")
-
-    board.push(mv)
-    fen_after = board.fen()
-    logger.info(f"[MOVE] fen_after={fen_after}")
-    return {"fen": fen_after}
-
-# ——— engine move endpoint ————————————————————————————————————————————
+# Engine move endpoint
 @app.post("/engine_move")
-def engine_move(req: EngineRequest):
-    logger.info(f"[ENGINE] fen_before={req.fen}   user_side={req.user_side}")
-    try:
-        board = chess.Board(req.fen)
-    except Exception:
-        raise HTTPException(400, "Invalid FEN")
+async def engine_move():
+    global game_board
+    # only run when it's engine's turn
+    if not game_board.is_game_over():
+        if user_side == 'b' and game_board.turn == chess.WHITE:
+            mv = compute_move_white(game_board)
+            if mv in game_board.legal_moves:
+                game_board.push(mv)
+        elif user_side == 'w' and game_board.turn == chess.BLACK:
+            mv = compute_move_black(game_board)
+            if mv in game_board.legal_moves:
+                game_board.push(mv)
+    return {"fen": game_board.fen()}
 
-    user_side = req.user_side.lower()
-    is_white_to_move = board.turn == chess.WHITE
-
-    if not board.is_game_over():
-        # only move if it's engine's turn
-        if (user_side == "w" and not is_white_to_move) or \
-           (user_side == "b" and     is_white_to_move):
-            mv = compute_move_white(board) if is_white_to_move else compute_move_black(board)
-            if mv in board.legal_moves:
-                board.push(mv)
-
-    fen_after = board.fen()
-    logger.info(f"[ENGINE] fen_after={fen_after}")
-    return {"fen": fen_after}
-
-# ——— reset endpoint —————————————————————————————————————————————————
+# Reset endpoint
 @app.post("/reset")
-def reset(req: ResetRequest):
-    logger.info(f"[RESET] user_side={req.user_side}")
-    board = chess.Board()
-    user_side = req.user_side.lower()
-    if user_side == "b":
-        mv = compute_move_white(board)
-        if mv in board.legal_moves:
-            board.push(mv)
-    fen_after = board.fen()
-    logger.info(f"[RESET] fen_after={fen_after}")
-    return {"fen": fen_after}
+async def reset(payload: dict):
+    global game_board, user_side
+    user_side = payload.get("user_side", "b").lower()
+    game_board = chess.Board()
+    # engine first move if user chose black
+    if user_side == 'b' and game_board.turn == chess.WHITE:
+        mv = compute_move_white(game_board)
+        if mv in game_board.legal_moves:
+            game_board.push(mv)
+    return {"fen": game_board.fen()}

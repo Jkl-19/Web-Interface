@@ -92,31 +92,31 @@ model=Model(inputs=input,outputs=output)
 model.load_weights('black.weights.h5')
 
 def get_eval_matrix(board):
-  eval_matrix=np.zeros((64,64)) #centipawn diff
-  legal_mask=np.zeros((64,64),dtype=bool)
-
-  is_white=board.turn #true if white's turn, false for black
   MATE_WEIGHT=1e4
 
-  for move in board.legal_moves:
-    board.push(move)
-    stockfish.set_fen_position(board.fen())
-    legal_mask[move.from_square,move.to_square]=1
-    eval=stockfish.get_evaluation()
-    value=eval["value"]
-    if eval["type"]=="cp":
-      if not is_white:
-        value=-value
-      eval_matrix[move.from_square,move.to_square]=value/100
-    elif eval["type"]=="mate":
-      if not is_white:
-        value=-value
-      if value==0:
-        value=1e-9
-      eval_matrix[move.from_square,move.to_square]=MATE_WEIGHT/value
-    board.pop()
-  illegal_mask=~legal_mask
-  eval_matrix[illegal_mask]=-1e6
+  entries = stockfish.get_top_moves(64)
+
+  eval_matrix = np.full((64, 64), -1e6, dtype=np.float32)
+  is_white=board.turn  
+
+  for entry in entries:
+      uci = entry["Move"]
+      fr,to = chess.parse_square(uci[:2]), chess.parse_square(uci[2:])
+
+      if "Centipawn" in entry:
+          v = entry["Centipawn"] / 100.0
+          if not is_white:
+              v = -v
+
+      elif "Mate" in entry:
+          m = entry["Mate"] or 1
+          v = MATE_WEIGHT / m
+          if not is_white:
+              v = -v
+      else:
+          continue
+      eval_matrix[fr,to] = v
+
   return eval_matrix
 
 def compute_move(board):

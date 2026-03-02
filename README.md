@@ -14,5 +14,4 @@ back-end is hosted on Google Cloud. The front-end then makes API calls to the cl
 To start, go to https://chess-website-test.netlify.app/, and click on "Play as White" / "Play as Black" on the top left. The engine should make a move when it is their turn.
 
 ## Note:
-There has been some server issues due to large amounts of requests. Please allow a while for the engine to run. If issues persist, feel free to contact us at jackylin@usc.edu.
-We appreciate your valuable feedback and will continue adding to our website!
+The Google Cloud server is no longer paid for, so the engine will not work as expected!
